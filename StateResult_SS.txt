@@ -10,35 +10,3 @@ IF.nop: False
 State after executing cycle: 2
 IF.PC: 8
 IF.nop: False
-----------------------------------------------------------------------
-State after executing cycle: 3
-IF.PC: 12
-IF.nop: False
-----------------------------------------------------------------------
-State after executing cycle: 4
-IF.PC: 16
-IF.nop: False
-----------------------------------------------------------------------
-State after executing cycle: 5
-IF.PC: 20
-IF.nop: False
-----------------------------------------------------------------------
-State after executing cycle: 6
-IF.PC: 24
-IF.nop: False
-----------------------------------------------------------------------
-State after executing cycle: 7
-IF.PC: 28
-IF.nop: False
-----------------------------------------------------------------------
-State after executing cycle: 8
-IF.PC: 32
-IF.nop: False
-----------------------------------------------------------------------
-State after executing cycle: 9
-IF.PC: 36
-IF.nop: False
-----------------------------------------------------------------------
-State after executing cycle: 10
-IF.PC: 40
-IF.nop: False

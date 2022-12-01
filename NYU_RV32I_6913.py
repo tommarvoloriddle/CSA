@@ -136,11 +136,11 @@ class InsMem(object):
             if self.table[instruction]['instr_type'] == 'I':
                 self.table[instruction]['imm'] = instruction[0:12]
             elif self.table[instruction]['instr_type'] == 'SB':
-                self.table[instruction]['imm'] = instruction[0] + instruction[24] + instruction[1:12] + instruction[20:24]
+                self.table[instruction]['imm'] = instruction[0] + instruction[24] + instruction[1:6] + instruction[20:24]
             elif self.table[instruction]['instr_type'] == 'LW':
                 self.table[instruction]['imm'] = instruction[0:12]
             elif self.table[instruction]['instr_type'] == 'J':
-                self.table[instruction]['imm'] = instruction[0:20] + instruction[20] + instruction[21:30] + instruction[30] + instruction[31]
+                self.table[instruction]['imm'] = instruction[0] + instruction[13:20] + instruction[12] + instruction[1:12]
             elif self.table[instruction]['instr_type'] == 'HALT':
                 self.table[instruction]['imm'] = None
             elif self.table[instruction]['instr_type'] == 'S':
@@ -206,7 +206,7 @@ class InsMem(object):
                     self.table[instruction]['instr_name'] = 'BGEU'
             elif self.table[instruction]['instr_type'] == 'LW':
                 if self.table[instruction]['func3'] == '000':
-                    self.table[instruction]['instr_name'] = 'LB'
+                    self.table[instruction]['instr_name'] = 'LW'
                 elif self.table[instruction]['func3'] == '001':
                     self.table[instruction]['instr_name'] = 'LH'
                 elif self.table[instruction]['func3'] == '010':
@@ -248,11 +248,11 @@ class InsMem(object):
         instruction = ''
         for i in range(len(ReadAddress)):
             if i%4 == 0 and i:
-                self.instructions.append(instruction[::-1])
+                self.instructions.append(instruction)
                 instruction = ''
             
             instruction += ReadAddress[i]
-        self.instructions.append(instruction[::-1])
+        self.instructions.append(instruction)
         self.fill_opcodes()
         self.fill_destionation_register()
         self.fill_source_register()
@@ -279,6 +279,8 @@ class DataMem(object):
             self.DMem = [data.replace("\n", "") for data in dm.readlines()]
         
         self.readInstr(self.DMem)
+        self.dMemFillZeros(len(self.DMem_instructions))
+        self.DMem = self.DMem_instructions
 
     def readInstr(self, ReadAddress):
         #read data memory
@@ -288,7 +290,18 @@ class DataMem(object):
         instruction = ''
         for i in range(len(ReadAddress)):
             self.DMem_instructions.append(ReadAddress[i])
+        
         # print(self.DMem_instructions)
+
+    def dMemFillZeros(self, curr_len):
+        #fill zeros in data memory
+        #return 32 bit hex val
+        print(curr_len)
+        max_size = MemSize
+        if curr_len < max_size * 4:
+            for i in range((max_size * 4) - curr_len):
+                self.DMem_instructions.append('00000000')
+        print(len(self.DMem_instructions))
         
         
     def writeDataMem(self, Address, WriteData):
@@ -304,7 +317,7 @@ class DataMem(object):
 class RegisterFile(object):
     def __init__(self, ioDir):
         self.outputFile = ioDir + "RFResult.txt"
-        self.Registers = [4 for i in range(32)]
+        self.Registers = [0x0 for i in range(32)]
     
     def readRF(self, Reg_addr):
         # Fill in
@@ -316,7 +329,7 @@ class RegisterFile(object):
          
     def outputRF(self, cycle):
         op = ["-"*70+"\n", "State of RF after executing cycle:" + str(cycle) + "\n"]
-        op.extend([str(val)+"\n" for val in self.Registers])
+        op.extend([str(bin(val)[2:].zfill(32))+"\n" for val in self.Registers])
         if(cycle == 0): perm = "w"
         else: perm = "a"
         with open(self.outputFile, perm) as file:
@@ -371,6 +384,10 @@ class SingleStageCore(Core):
     
         if instruction_props['instr_type'] == 'HALT':
             self.halted = True
+            self.state.IF['nop'] = True
+            print("Register File: ", self.myRF.Registers)
+            self.myRF.outputRF(self.cycle)
+            self.printState(self.state, self.cycle)
             return
         
         if instruction_props['src_reg1']:
@@ -385,67 +402,130 @@ class SingleStageCore(Core):
             # Load from Memory
             # Get the address from the register file
             address = self.myRF.Registers[instruction_props['src_reg1']]
-            address_idx = (address)*4
+            address_idx = address
+            imm_dec = int(instruction_props['imm'], 2)
             # Get the data from the data memory
             data = ''
-            data += self.ext_dmem.DMem[address_idx]
-            data += self.ext_dmem.DMem[address_idx+1]
-            data += self.ext_dmem.DMem[address_idx+2]
-            data += self.ext_dmem.DMem[address_idx+3]
-            data = data[::-1]
+            data += self.ext_dmem.DMem[address_idx + imm_dec]
+            data += self.ext_dmem.DMem[address_idx+ 1 + imm_dec]
+            data += self.ext_dmem.DMem[address_idx+ 2 + imm_dec]
+            data += self.ext_dmem.DMem[address_idx+ 3 + imm_dec]
+            # data = data[::-1]
             data = int(data, 2)
             print("Data: ", data)
             self.myRF.Registers[instruction_props['dest_reg']] = data
         
         elif instruction_props['instr_name'] == 'SW':
             imm_dec = int(instruction_props['imm'], 2)
-            dest_reg_dec = instruction_props['src_reg2']
-            src_reg_dec = self.myRF.Registers[instruction_props['src_reg1']]
+            dest_reg_dec = instruction_props['src_reg1']
+            src_reg_dec = self.myRF.Registers[instruction_props['src_reg2']]
+            print("src_reg_dec: ", src_reg_dec)
             src_bin = str(bin(src_reg_dec)[2:].zfill(32))
+            print("dest_reg_dec: ", dest_reg_dec, imm_dec)
+            print("src_bin: ", src_bin)
             # write in data memory
-            start_idx = (src_reg_dec)*4
+            start_idx = dest_reg_dec
             self.ext_dmem.DMem[start_idx + imm_dec] = src_bin[0:8]
             self.ext_dmem.DMem[start_idx + imm_dec + 1] = src_bin[8:16]
             self.ext_dmem.DMem[start_idx + imm_dec + 2] = src_bin[16:24]
             self.ext_dmem.DMem[start_idx + imm_dec + 3] = src_bin[24:32]
         elif instruction_props['instr_name'] == 'ADD':
-            self.myRF.Registers[instruction_props['dest_reg']] = self.myRF.Registers[instruction_props['src_reg1']] + self.myRF.Registers[instruction_props['src_reg2']]
+            result = self.myRF.Registers[instruction_props['src_reg1']] + self.myRF.Registers[instruction_props['src_reg2']]
+            binarized_result = str(bin(result)[2:].zfill(32))
+            print("bin_result", len(binarized_result))
+            if len(binarized_result) > 32:
+                binarized_result = binarized_result[-32:]
+                result = int(binarized_result, 2)
+                print("result: ", result)
+            self.myRF.Registers[instruction_props['dest_reg']] = result
 
         elif instruction_props['instr_name'] == 'SUB':
-            self.myRF.Registers[instruction_props['dest_reg']] = self.myRF.Registers[instruction_props['src_reg1']] - self.myRF.Registers[instruction_props['src_reg2']]
+            result = self.myRF.Registers[instruction_props['src_reg1']] - self.myRF.Registers[instruction_props['src_reg2']]
+            binarized_result = str(bin(result)[2:].zfill(32))
+            if len(binarized_result) > 32:
+                binarized_result = binarized_result[-32:]
+                result = int(binarized_result, 2)
+            self.myRF.Registers[instruction_props['dest_reg']] = result
 
         elif instruction_props['instr_name'] == 'XOR':
-            self.myRF.Registers[instruction_props['dest_reg']] = self.myRF.Registers[instruction_props['src_reg1']] ^ self.myRF.Registers[instruction_props['src_reg2']]
+            result = self.myRF.Registers[instruction_props['src_reg1']] ^ self.myRF.Registers[instruction_props['src_reg2']]
+            binarized_result = str(bin(result)[2:].zfill(32))
+            if len(binarized_result) > 32:
+                binarized_result = binarized_result[-32:]
+                result = int(binarized_result, 2)
+            self.myRF.Registers[instruction_props['dest_reg']] = result
 
         elif instruction_props['instr_name'] == 'NOR':
-            self.myRF.Registers[instruction_props['dest_reg']] = ~(self.myRF.Registers[instruction_props['src_reg1']] | self.myRF.Registers[instruction_props['src_reg2']])
+            result = ~(self.myRF.Registers[instruction_props['src_reg1']] | self.myRF.Registers[instruction_props['src_reg2']])
+            binarized_result = str(bin(result)[2:].zfill(32))
+            if len(binarized_result) > 32:
+                binarized_result = binarized_result[-32:]
+                result = int(binarized_result, 2)
+            self.myRF.Registers[instruction_props['dest_reg']] = result
 
         elif instruction_props['instr_name'] == 'AND':
-            self.myRF.Registers[instruction_props['dest_reg']] = self.myRF.Registers[instruction_props['src_reg1']] & self.myRF.Registers[instruction_props['src_reg2']]
+            result = self.myRF.Registers[instruction_props['src_reg1']] & self.myRF.Registers[instruction_props['src_reg2']]
+            binarized_result = str(bin(result)[2:].zfill(32))
+            if len(binarized_result) > 32:
+                binarized_result = binarized_result[-32:]
+                result = int(binarized_result, 2)
+            self.myRF.Registers[instruction_props['dest_reg']] = result
 
         elif instruction_props['instr_name'] == 'ADDI':
-            self.myRF.Registers[instruction_props['dest_reg']] = self.myRF.Registers[instruction_props['src_reg1']] + int(instruction_props['imm'], 2)
+            result = self.myRF.Registers[instruction_props['src_reg1']] + int(instruction_props['imm'], 2)
+            binarized_result = str(bin(result)[2:].zfill(32))
+            if len(binarized_result) > 32:
+                binarized_result = binarized_result[-32:]
+                result = int(binarized_result, 2)
+            self.myRF.Registers[instruction_props['dest_reg']] = result
 
         elif instruction_props['instr_name'] == 'ORI':
-            self.myRF.Registers[instruction_props['dest_reg']] = self.myRF.Registers[instruction_props['src_reg1']] | int(instruction_props['imm'], 2)
+            result = self.myRF.Registers[instruction_props['src_reg1']] | int(instruction_props['imm'], 2)
+            binarized_result = str(bin(result)[2:].zfill(32))
+            if len(binarized_result) > 32:
+                binarized_result = binarized_result[-32:]
+                result = int(binarized_result, 2)
+            self.myRF.Registers[instruction_props['dest_reg']] = result
         
         elif instruction_props['instr_name'] == 'XORI':
-            self.myRF.Registers[instruction_props['dest_reg']] = self.myRF.Registers[instruction_props['src_reg1']] ^ int(instruction_props['imm'], 2)
+            result = self.myRF.Registers[instruction_props['src_reg1']] ^ int(instruction_props['imm'], 2)
+            binarized_result = str(bin(result)[2:].zfill(32))
+            if len(binarized_result) > 32:
+                binarized_result = binarized_result[-32:]
+                result = int(binarized_result, 2)
+            self.myRF.Registers[instruction_props['dest_reg']] = result
 
         elif instruction_props['instr_name'] == 'ANDI':
-            self.myRF.Registers[instruction_props['dest_reg']] = self.myRF.Registers[instruction_props['src_reg1']] & int(instruction_props['imm'], 2)
+            result = self.myRF.Registers[instruction_props['src_reg1']] & int(instruction_props['imm'], 2)
+            binarized_result = str(bin(result)[2:].zfill(32))
+            if len(binarized_result) > 32:
+                binarized_result = binarized_result[-32:]
+                result = int(binarized_result, 2)
+            self.myRF.Registers[instruction_props['dest_reg']] = result
 
         elif instruction_props['instr_name'] == 'JAL':
             self.PC = int(instruction_props['imm'], 2)
         
         elif instruction_props['instr_name'] == 'BEQ':
             if self.myRF.Registers[instruction_props['src_reg1']] == self.myRF.Registers[instruction_props['src_reg2']]:
-                self.PC = int(instruction_props['imm'], 2)
+                result = self.PC + int(instruction_props['imm'], 2)
+                binarized_result = str(bin(result)[2:].zfill(32))
+                if len(binarized_result) > 32:
+                    binarized_result = binarized_result[-32:]
+                    result = int(binarized_result, 2)
+                self.PC = result
+                self.PC = self.PC + int(instruction_props['imm'], 2)
             else:
                 self.PC += 4
         elif instruction_props['instr_name'] == 'BNE':
             if self.myRF.Registers[instruction_props['src_reg1']] != self.myRF.Registers[instruction_props['src_reg2']]:
-                self.PC = int(instruction_props['imm'], 2)
+                result = self.PC + int(instruction_props['imm'], 2)
+                binarized_result = str(bin(result)[2:].zfill(11))
+                if len(binarized_result) > 11:
+                    binarized_result = binarized_result[-11:]
+                    result = int(binarized_result, 2)
+                print("result: ", result)
+                self.PC = result
             else:
                 self.PC += 4
 
@@ -459,33 +539,6 @@ class SingleStageCore(Core):
 
         if old_pc == self.PC:
             self.PC += 4    
-
-        # self.state.EX['Read_data1'] = self.myRF.Registers[instruction_props['src_reg1']]
-        # self.state.EX['Read_data2'] = self.myRF.Registers[instruction_props['src_reg2']]
-        # self.state.EX['Imm'] = instruction_props['imm']
-        # self.state.EX['Rs'] = instruction_props['src_reg1']
-        # self.state.EX['Rt'] = instruction_props['src_reg2']
-        # self.state.EX['Wrt_reg_addr'] = instruction_props['dest_reg']
-        # self.state.EX['is_I_type'] =  True if instruction_props['instr_type'] == 'I' else False
-        # # self.state.EX.rd_mem = instruction_props.rd_mem
-        # # self.state.EX.wrt_mem = instruction_props.wrt_mem
-        # self.state.EX['alu_op'] = instruction_props['instr_name']
-        # self.state.EX['wrt_enable'] = True if instruction_props['dest_reg'] != 0 else False
-        # if instruction_props['dest_reg']:
-        #     self.state.MEM['ALUresult'] = self.myRF.Registers[instruction_props['dest_reg']]
-        # self.state.MEM['Store_data'] = self.myRF.Registers[instruction_props['src_reg2']]
-        # self.state.MEM['Rs'] = instruction_props['src_reg1']
-        # self.state.MEM['Rt'] = instruction_props['src_reg2']
-        # self.state.MEM['Wrt_reg_addr'] = instruction_props['dest_reg']
-        # # self.state.MEM.rd_mem = instruction_props.rd_mem
-        # # self.state.MEM.wrt_mem = instruction_props.wrt_mem
-        # self.state.MEM['wrt_enable'] = True if instruction_props['dest_reg'] != 0 else False
-        # if instruction_props['dest_reg']:
-        #     self.state.WB['Wrt_data'] = self.myRF.Registers[instruction_props['dest_reg']]
-        # self.state.WB['Rs'] = instruction_props['src_reg1']
-        # self.state.WB['Rt'] = instruction_props['src_reg2']
-        # self.state.WB['Wrt_reg_addr'] = instruction_props['dest_reg']
-        # self.state.WB['wrt_enable'] = True if instruction_props['dest_reg'] != 0 else False
 
         self.printState(self.state, self.cycle)
 
@@ -527,6 +580,32 @@ class FiveStageCore(Core):
 
     def step(self):
         # Your implementation
+        # self.state.EX['Read_data1'] = self.myRF.Registers[instruction_props['src_reg1']]
+        # self.state.EX['Read_data2'] = self.myRF.Registers[instruction_props['src_reg2']]
+        # self.state.EX['Imm'] = instruction_props['imm']
+        # self.state.EX['Rs'] = instruction_props['src_reg1']
+        # self.state.EX['Rt'] = instruction_props['src_reg2']
+        # self.state.EX['Wrt_reg_addr'] = instruction_props['dest_reg']
+        # self.state.EX['is_I_type'] =  True if instruction_props['instr_type'] == 'I' else False
+        # # self.state.EX.rd_mem = instruction_props.rd_mem
+        # # self.state.EX.wrt_mem = instruction_props.wrt_mem
+        # self.state.EX['alu_op'] = instruction_props['instr_name']
+        # self.state.EX['wrt_enable'] = True if instruction_props['dest_reg'] != 0 else False
+        # if instruction_props['dest_reg']:
+        #     self.state.MEM['ALUresult'] = self.myRF.Registers[instruction_props['dest_reg']]
+        # self.state.MEM['Store_data'] = self.myRF.Registers[instruction_props['src_reg2']]
+        # self.state.MEM['Rs'] = instruction_props['src_reg1']
+        # self.state.MEM['Rt'] = instruction_props['src_reg2']
+        # self.state.MEM['Wrt_reg_addr'] = instruction_props['dest_reg']
+        # # self.state.MEM.rd_mem = instruction_props.rd_mem
+        # # self.state.MEM.wrt_mem = instruction_props.wrt_mem
+        # self.state.MEM['wrt_enable'] = True if instruction_props['dest_reg'] != 0 else False
+        # if instruction_props['dest_reg']:
+        #     self.state.WB['Wrt_data'] = self.myRF.Registers[instruction_props['dest_reg']]
+        # self.state.WB['Rs'] = instruction_props['src_reg1']
+        # self.state.WB['Rt'] = instruction_props['src_reg2']
+        # self.state.WB['Wrt_reg_addr'] = instruction_props['dest_reg']
+        # self.state.WB['wrt_enable'] = True if instruction_props['dest_reg'] != 0 else False
         # --------------------- WB stage ---------------------
         
         
@@ -592,6 +671,9 @@ if __name__ == "__main__":
     while(True):
         if not ssCore.halted:
             ssCore.step()
+            ssCore.cycle += 1
+            ssCore.myRF.outputRF(ssCore.cycle)
+            ssCore.printState(ssCore.state, ssCore.cycle)
         
         if not fsCore.halted:
             fsCore.step()
