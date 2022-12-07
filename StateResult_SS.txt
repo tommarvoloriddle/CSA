@@ -10,3 +10,15 @@ IF.nop: False
 State after executing cycle: 2
 IF.PC: 8
 IF.nop: False
+----------------------------------------------------------------------
+State after executing cycle: 3
+IF.PC: 12
+IF.nop: False
+----------------------------------------------------------------------
+State after executing cycle: 4
+IF.PC: 16
+IF.nop: True
+----------------------------------------------------------------------
+State after executing cycle: 5
+IF.PC: 16
+IF.nop: True
