@@ -51,13 +51,13 @@ Execute the simulation for the desired pipeline architecture:
 For the single-stage core:
 
 ``` bash
-  python single_stage_core.py --iodir /path/to/input/files
+  python NYU_RV32I_6913.py --iodir /path/to/input/files
 ```
 
 For the five-stage core:
 
 ``` bash
-  python five_stage_core.py --iodir /path/to/input/files\
+  python NYU_RV32I_6913.py --iodir /path/to/input/files\
 ```
 
 Replace /path/to/input/files with the directory containing your input files.
